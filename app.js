@@ -1,0 +1,12 @@
+'use strict';
+const $=s=>document.querySelector(s);
+const titles={overview:'نظرة عامة',grades:'رصد الدرجات',reports:'التقارير والتحليل',account:'الحساب والصلاحيات'};
+function page(id){if(!titles[id])return;document.querySelectorAll('.page').forEach(x=>x.hidden=x.id!==id);document.querySelectorAll('nav button').forEach(b=>{if(b.dataset.page===id)b.setAttribute('aria-current','page');else b.removeAttribute('aria-current');});$('#breadcrumb').textContent=titles[id];$('#workspace-main').focus();$('#status').textContent='تم فتح '+titles[id];}
+$('#preview').addEventListener('click',()=>{$('#login').hidden=true;$('#workspace').hidden=false;$('.skip').href='#workspace-main';page('overview');});
+$('#exit').addEventListener('click',()=>{$('#workspace').hidden=true;$('#login').hidden=false;$('.skip').href='#main';$('#preview').focus();});
+document.querySelectorAll('[data-page],[data-go]').forEach(b=>b.addEventListener('click',()=>page(b.dataset.page||b.dataset.go)));
+$('#toggle-password').addEventListener('click',()=>{const show=$('#password').type==='password';$('#password').type=show?'text':'password';$('#toggle-password').textContent=show?'إخفاء':'إظهار';$('#toggle-password').setAttribute('aria-label',show?'إخفاء كلمة المرور':'إظهار كلمة المرور');});
+$('#login-form').addEventListener('submit',e=>e.preventDefault());
+$('#grade').addEventListener('change',()=>{const grade=$('#grade').value;const subjects=!grade?['اختاري الصف أولًا']:/^(الأول|الثاني) /.test(grade)?['لغتي','رياضيات']:['لغتي','رياضيات','علوم','إنجليزي'];$('#subject').replaceChildren(...subjects.map(s=>{const o=document.createElement('option');o.textContent=s;return o;}));$('#grade-note').textContent=/^(الأول|الثاني) /.test(grade)?'درجات الأول والثاني من 40: مؤجلة لحين الاعتماد':'الدرجة العظمى تُحدد من التقييم المعتمد';});
+const messages={'تشخيص الفترة الأولى':'يظهر توزيع مستويات الأداء واكتمال الرصد عند ربط البيانات واعتماد حدود التصنيف.','مقارنة الفترتين':'بانتظار القياسين. تتم المقارنة للطالبات ذوات الدرجتين في المادة نفسها فقط.','بطاقة الطالبة':'اختاري الطالبة بعد تفعيل الاتصال لعرض درجاتها ومتابعتها. لا توجد بيانات متصلة حاليًا.'};
+document.querySelectorAll('[data-report]').forEach(b=>b.addEventListener('click',()=>{document.querySelectorAll('[data-report]').forEach(x=>x.setAttribute('aria-pressed',String(x===b)));$('#report-title').textContent=b.dataset.report;$('#report-message').textContent=messages[b.dataset.report];}));

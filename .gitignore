@@ -1,0 +1,7 @@
+qa/
+__pycache__/
+*.xlsx
+*.csv
+*.env
+.env*
+node_modules/
