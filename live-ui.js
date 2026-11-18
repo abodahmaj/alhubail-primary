@@ -4,10 +4,42 @@
  if(configured){find('.environment').textContent='اتصال مهيأ · تسجيل الدخول مطلوب';find('#username').disabled=false;find('#username').required=true;find('#password').disabled=false;find('#password').required=true;find('#login-submit').disabled=false;feedback.textContent='الدخول للحسابات المعتمدة فقط. الجلسة تنتهي بعد 30 دقيقة من عدم النشاط.';connect().ready.catch(()=>{if(connection){connection.close();connection=null;}});}
  try{const note=sessionStorage.getItem('alhubail-logout-note');if(note){feedback.textContent=note;sessionStorage.removeItem('alhubail-logout-note');}}catch(_){}
  function connect(){if(!connection)connection=window.createSchoolConnection(window.SCHOOL_BACKEND_URL);return connection;}
- async function api(action,payload){const result=await connect().request({action,payload,token});if(!result||!result.ok){if(result?.error?.code==='UNAUTHORIZED'){token=null;currentUser=null;find('#live-school')?.remove();find('#live-reports')?.remove();find('#workspace').hidden=true;find('#login').hidden=false;feedback.textContent='انتهت الجلسة. يرجى تسجيل الدخول مجددًا.';}throw Error(result?.error?.code||'SERVICE_UNAVAILABLE');}return result.data;}
+ function api(action,payload){return connect().request({action,payload,token}).then(result=>{if(!result||!result.ok){if(result?.error?.code==='UNAUTHORIZED'){token=null;currentUser=null;find('#live-school')?.remove();find('#live-reports')?.remove();find('#live-executive')?.remove();find('#workspace').hidden=true;find('#login').hidden=false;feedback.textContent='انتهت الجلسة. يرجى تسجيل الدخول مجددًا.';}throw Error(result?.error?.code||'SERVICE_UNAVAILABLE');}return result.data;});}
  function node(tag,text,cls){const n=document.createElement(tag);if(text!==undefined)n.textContent=text;if(cls)n.className=cls;return n;}
  function populate(select,list,label){select.replaceChildren();select.append(new Option(label,''));for(const x of list)select.append(new Option(x.label,x.value));}
+ let analyticsCache=null;
+ function downloadCsv(filename,headers,rows){
+  const esc=v=>'"'+String(v??'').replace(/"/g,'""')+'"';
+  const csv='\uFEFF'+[headers.map(esc).join(','),...rows.map(r=>r.map(esc).join(','))].join('\r\n');
+  const blob=new Blob([csv],{type:'text/csv;charset=utf-8;'}),url=URL.createObjectURL(blob),a=document.createElement('a');
+  a.href=url;a.download=filename;document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);
+ }
+ function barList(items){
+  const list=node('div',undefined,'bar-list');
+  for(const it of items){
+   const row=node('div',undefined,'bar-row'),hd=node('div',undefined,'bar-head');
+   hd.append(node('span',it.label),node('strong',it.right));
+   const trk=node('div',undefined,'bar-track'),fill=node('div',undefined,'bar-fill');
+   fill.style.width=Math.max(0,Math.min(100,Math.round((it.pct||0)*100)))+'%';
+   trk.append(fill);row.append(hd,trk);list.append(row);
+  }
+  return list;
+ }
+ function renderExecutive(an){
+  analyticsCache=an;
+  find('#live-executive')?.remove();
+  const grid=node('div',undefined,'exec-grid');grid.id='live-executive';
+  const subjCard=node('section',undefined,'panel exec-card');
+  subjCard.append(node('h2','مقارنة المواد (الفترة الأولى)'),barList((an.bySubject||[]).map(s=>({label:s.subject_name+' ('+s.recorded+' درجة)',right:fmtPct(s.average),pct:s.average}))));
+  const gradeCard=node('section',undefined,'panel exec-card');
+  gradeCard.append(node('h2','مقارنة الصفوف والأقسام'),barList([...(an.byGrade||[]).map(g=>({label:g.grade+' ('+g.students+' طالبة/طالب)',right:fmtPct(g.average),pct:g.average})),...(an.bySection||[]).map(sec=>({label:'القسم: '+sec.section+' ('+sec.students+')',right:fmtPct(sec.average),pct:sec.average}))]));
+  grid.append(subjCard,gradeCard);
+  const anchor=find('#live-school');
+  if(anchor)anchor.before(grid);else find('#overview').append(grid);
+  if(school)renderReports(school,true);
+ }
  function liveSummary(data){
+  analyticsCache=null;find('#live-executive')?.remove();
   school=data;const director=currentUser.role==='headmistress';find('.environment').textContent='جلسة موثقة · '+(director?'مديرة المدرسة':'معلمة');find('.toolbar .pill').textContent=currentUser.display_name;
   find('#overview .heading h1').textContent=director?'متابعة أداء المدرسة':'متابعة فصولي وموادي';find('#overview .heading p').textContent='البيانات من قاعدة المدرسة. لا تُحسب الدرجة غير المرصودة صفرًا.';
   const stats=find('#overview .stats');stats.replaceChildren();const comp=data.completion||{};const pct=comp.completionRate!==null&&comp.completionRate!==undefined?Math.round(comp.completionRate*100)+'%':'—';const recNote=data.recordedSuppressed?'حماية خصوصية المجموعات الصغيرة':comp.expectedEligible?'اكتمال الرصد: '+pct+' ('+comp.recordedEligible+' / '+comp.expectedEligible+')':'لا تقييمات معتمدة حتى إضافتها';const clsNote=comp.deferredClasses?comp.deferredClasses+' فصول (الأول والثاني) مؤجلة':'حسب توزيع المدرسة';for(const [title,value,note] of [['الطلاب والطالبات',data.students,'مؤشر عام للمدرسة دون أسماء'],['الفصول',data.classes,clsNote],['الدرجات المرصودة',data.recordedSuppressed?'محجوب':data.recorded,recNote]]){const a=node('article');a.append(node('span',title),node('strong',String(value)),node('small',note));stats.append(a);}
@@ -68,16 +100,50 @@
    }
    const comp=data.completion||{};
    host.append(node('p','اكتمال الرصد للصفوف العليا (الثالث–السادس): '+fmtPct(comp.completionRate)+' ('+(comp.recordedEligible||0)+' من '+(comp.expectedEligible||0)+') · الأول والثاني مؤجلان ('+(comp.deferredClasses||0)+' فصول) · حدود التصنيف بانتظار اعتماد المدرسة.','notice'));
+   if(analyticsCache){
+    const d=analyticsCache.distribution||{};
+    const band=node('div',undefined,'kpi-band');
+    for(const [lbl,val] of [['90% – 100%',d.gte90||0],['75% – 89%',d.r75_89||0],['50% – 74%',d.r50_74||0],['أقل من 50% (دعم)',d.below50||0]]){const box=node('div',undefined,'kpi-box');box.append(node('span',lbl),node('strong',String(val)));band.append(box);}
+    host.append(band);
+   }
    const rows=data.classSubjectsSummary;
    const f=node('div',undefined,'filters'),gLbl=node('label','الصف'),gSel=node('select'),mLbl=node('label','المادة'),mSel=node('select');
    const grades=[...new Set(rows.map(r=>r.grade))],subjs=[...new Set(rows.map(r=>r.subject_id))];
    populate(gSel,grades.map(g=>({value:g,label:g})),'جميع الصفوف');
    populate(mSel,subjs.map(id=>({value:id,label:rows.find(r=>r.subject_id===id)?.subject_name||id})),'جميع المواد');
    gLbl.append(gSel);mLbl.append(mSel);f.append(gLbl,mLbl);host.append(f);
+   const actions=node('div',undefined,'report-actions'),expSummary=node('button','تصدير ملخص الفصول CSV','secondary');
+   expSummary.addEventListener('click',()=>downloadCsv('alhubail-period1-summary.csv',['الصف','الفصل','القسم','المادة','المرصود','المتوقع','الاكتمال','المتوسط','الأدنى','الأعلى'],rows.map(r=>[r.grade,r.class_name,r.section,r.subject_name,r.recorded,r.expected,fmtPct(r.completionRate),fmtPct(r.average),r.minScore??'',r.maxScore??''])));
+   actions.append(expSummary);host.append(actions);
    const wrap=node('div',undefined,'table-wrap'),tbl=node('table'),hd=node('thead'),hr=node('tr');
    for(const h of ['الصف','الفصل','القسم','المادة','المرصود','الاكتمال','المتوسط','الأدنى–الأعلى','كشف'])hr.append(node('th',h));
    hd.append(hr);tbl.append(hd);const bd=node('tbody');tbl.append(bd);wrap.append(tbl);host.append(wrap);
    const detail=node('div');detail.setAttribute('aria-live','polite');detail.style.marginTop='16px';host.append(detail);
+   if(analyticsCache){
+    const wl=analyticsCache.supportWatchlist||[],tp=analyticsCache.topPerformers||[];
+    const wlTitle=node('div',undefined,'table-top');wlTitle.append(node('h3','رادار الدعم والمتابعة (أقل من 50%: '+wl.length+' حالة)'));
+    const expWl=node('button','تصدير قائمة الدعم CSV','secondary');
+    expWl.addEventListener('click',()=>downloadCsv('alhubail-support-watchlist.csv',['الاسم','الصف','الفصل','القسم','المادة','الدرجة','العظمى'],wl.map(x=>[x.name,x.grade,x.class_name,x.section,x.subject_name,x.score,x.max_score])));
+    wlTitle.append(expWl);host.append(wlTitle);
+    if(wl.length){
+     const wWrap=node('div',undefined,'table-wrap'),wTbl=node('table'),wHd=node('thead'),wHr=node('tr');
+     for(const h of ['الاسم','الصف','الفصل','القسم','المادة','الدرجة'])wHr.append(node('th',h));wHd.append(wHr);wTbl.append(wHd);
+     const wBd=node('tbody');
+     for(const x of wl){const tr=node('tr'),sc=node('td');sc.append(node('span',x.score+' / '+x.max_score,'badge-warn'));tr.append(node('td',x.name),node('td',x.grade),node('td',x.class_name),node('td',x.section),node('td',x.subject_name),sc);wBd.append(tr);}
+     wTbl.append(wBd);wWrap.append(wTbl);host.append(wWrap);
+    }else host.append(node('p','لا توجد درجات أقل من 50% في البيانات المرصودة.','notice'));
+    const tpTitle=node('div',undefined,'table-top');tpTitle.append(node('h3','لوحة التميز (متوسط ≥ 95%: '+tp.length+' طالب وطالبة)'));
+    const expTp=node('button','تصدير المتفوقين CSV','secondary');
+    expTp.addEventListener('click',()=>downloadCsv('alhubail-top-performers.csv',['الاسم','الصف','الفصل','القسم','المعدل','عدد المواد'],tp.map(x=>[x.name,x.grade,x.class_name,x.section,fmtPct(x.average),x.subjectsCount])));
+    tpTitle.append(expTp);host.append(tpTitle);
+    if(tp.length){
+     const tWrap=node('div',undefined,'table-wrap'),tTbl=node('table'),tHd=node('thead'),tHr=node('tr');
+     for(const h of ['الاسم','الصف','الفصل','القسم','المعدل','المواد'])tHr.append(node('th',h));tHd.append(tHr);tTbl.append(tHd);
+     const tBd=node('tbody');
+     for(const x of tp){const tr=node('tr'),av=node('td');av.append(node('span',fmtPct(x.average),'badge-good'));tr.append(node('td',x.name),node('td',x.grade),node('td',x.class_name),node('td',x.section),av,node('td',String(x.subjectsCount)));tBd.append(tr);}
+     tTbl.append(tBd);tWrap.append(tTbl);host.append(tWrap);
+    }
+   }
    function renderRows(){
     bd.replaceChildren();
     const filtered=rows.filter(r=>(!gSel.value||r.grade===gSel.value)&&(!mSel.value||r.subject_id===mSel.value));
@@ -106,6 +172,6 @@
   document.querySelectorAll('[data-report]').forEach(b=>b.addEventListener('click',()=>{activeTab=b.dataset.report;draw();}));
   draw();
  }
- find('#login-form').addEventListener('submit',async e=>{e.preventDefault();if(!configured)return;const button=find('#login-submit');button.disabled=true;feedback.textContent='جارٍ التحقق من الاتصال والحساب…';let success=false;try{const username=find('#username').value,password=find('#password').value;const r=await connect().request({action:'login',payload:{username,password}});find('#password').value='';if(!r?.ok){feedback.textContent=r?.error?.code==='NOT_READY'?'حساب المديرة لم يُهيأ بعد. أكملي إعداد الحساب من ملف القاعدة.':'تعذر تسجيل الدخول. تحققي من البيانات أو حاولي لاحقًا.';return;}token=r.data.token;currentUser=r.data.user;const summary=await api('summary');liveSummary(summary);find('#login').hidden=true;find('#workspace').hidden=false;find('.skip').href='#workspace-main';page('overview');success=true;}catch(e){const code=e?.message||'';feedback.textContent=code==='BACKEND_TIMEOUT'?'تعذر تهيئة جسر الاتصال بالخدمة (BACKEND_TIMEOUT). تأكدي من السماح للإطارات وملفات الارتباط أو حدّثي الصفحة.':code==='REQUEST_TIMEOUT'?'انتهت مهلة الرد من الخادم (REQUEST_TIMEOUT). أعيدي المحاولة بعد لحظات.':'تعذر الاتصال بالخدمة'+(code?' ('+code+')':'')+'. لم يتم تسجيل الدخول.';if(connection){connection.close();connection=null;}token=null;currentUser=null;}finally{find('#password').value='';button.disabled=false;if(!success)find('#login').hidden=false;}});
- find('#exit').addEventListener('click',async e=>{if(!token)return;e.stopImmediatePropagation();const oldToken=token;token=null;currentUser=null;school=null;find('#live-school')?.remove();find('#live-reports')?.remove();find('#workspace').hidden=true;find('#login').hidden=false;feedback.textContent='جارٍ إنهاء الجلسة…';try{const r=await connection.request({action:'logout',token:oldToken});if(!r?.ok)feedback.textContent='أُغلقت الجلسة محليًا؛ تعذر تأكيد إلغائها في الخادم.';else feedback.textContent='تم تسجيل الخروج.';}catch(_){feedback.textContent='أُغلقت الجلسة محليًا؛ تعذر تأكيد إلغائها في الخادم.';}finally{if(connection)connection.close();connection=null;try{sessionStorage.setItem('alhubail-logout-note',feedback.textContent);}catch(_){}location.reload();}},true);
+ find('#login-form').addEventListener('submit',async e=>{e.preventDefault();if(!configured)return;const button=find('#login-submit');button.disabled=true;feedback.textContent='جارٍ التحقق من الاتصال والحساب…';let success=false;try{const username=find('#username').value,password=find('#password').value;const r=await connect().request({action:'login',payload:{username,password}});find('#password').value='';if(!r?.ok){feedback.textContent=r?.error?.code==='NOT_READY'?'حساب المديرة لم يُهيأ بعد. أكملي إعداد الحساب من ملف القاعدة.':'تعذر تسجيل الدخول. تحققي من البيانات أو حاولي لاحقًا.';return;}token=r.data.token;currentUser=r.data.user;const summary=await api('summary');liveSummary(summary);if(currentUser.role==='headmistress')api('analytics').then(renderExecutive).catch(()=>{});find('#login').hidden=true;find('#workspace').hidden=false;find('.skip').href='#workspace-main';page('overview');success=true;}catch(e){const code=e?.message||'';feedback.textContent=code==='BACKEND_TIMEOUT'?'تعذر تهيئة جسر الاتصال بالخدمة (BACKEND_TIMEOUT). تأكدي من السماح للإطارات وملفات الارتباط أو حدّثي الصفحة.':code==='REQUEST_TIMEOUT'?'انتهت مهلة الرد من الخادم (REQUEST_TIMEOUT). أعيدي المحاولة بعد لحظات.':'تعذر الاتصال بالخدمة'+(code?' ('+code+')':'')+'. لم يتم تسجيل الدخول.';if(connection){connection.close();connection=null;}token=null;currentUser=null;}finally{find('#password').value='';button.disabled=false;if(!success)find('#login').hidden=false;}});
+ find('#exit').addEventListener('click',async e=>{if(!token)return;e.stopImmediatePropagation();const oldToken=token;token=null;currentUser=null;school=null;analyticsCache=null;find('#live-school')?.remove();find('#live-reports')?.remove();find('#live-executive')?.remove();find('#workspace').hidden=true;find('#login').hidden=false;feedback.textContent='جارٍ إنهاء الجلسة…';try{const r=await connection.request({action:'logout',token:oldToken});if(!r?.ok)feedback.textContent='أُغلقت الجلسة محليًا؛ تعذر تأكيد إلغائها في الخادم.';else feedback.textContent='تم تسجيل الخروج.';}catch(_){feedback.textContent='أُغلقت الجلسة محليًا؛ تعذر تأكيد إلغائها في الخادم.';}finally{if(connection)connection.close();connection=null;try{sessionStorage.setItem('alhubail-logout-note',feedback.textContent);}catch(_){}location.reload();}},true);
 })();
