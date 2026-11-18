@@ -25,15 +25,90 @@
   }
   return list;
  }
+ function svgDonut(dist){
+  const NS='http://www.w3.org/2000/svg',items=[{lbl:'90% – 100% (تميز)',val:dist.gte90||0,color:'#075c49'},{lbl:'75% – 89% (متقدم)',val:dist.r75_89||0,color:'#2d8a6e'},{lbl:'50% – 74% (متوسط)',val:dist.r50_74||0,color:'#d49b27'},{lbl:'أقل من 50% (دعم)',val:dist.below50||0,color:'#b83a2d'}];
+  const total=items.reduce((s,x)=>s+x.val,0),wrap=node('div',undefined,'donut-wrap');
+  const svg=document.createElementNS(NS,'svg');svg.setAttribute('viewBox','0 0 120 120');svg.setAttribute('width','132');svg.setAttribute('height','132');svg.setAttribute('aria-hidden','true');
+  const r=44,c=2*Math.PI*r;let off=0;
+  if(!total){const bg=document.createElementNS(NS,'circle');bg.setAttribute('cx','60');bg.setAttribute('cy','60');bg.setAttribute('r',String(r));bg.setAttribute('fill','none');bg.setAttribute('stroke','#e8efec');bg.setAttribute('stroke-width','16');svg.append(bg);}
+  else{
+   for(const it of items){
+    if(!it.val)continue;
+    const len=(it.val/total)*c,seg=document.createElementNS(NS,'circle');
+    seg.setAttribute('cx','60');seg.setAttribute('cy','60');seg.setAttribute('r',String(r));seg.setAttribute('fill','none');seg.setAttribute('stroke',it.color);seg.setAttribute('stroke-width','16');
+    seg.setAttribute('stroke-dasharray',len.toFixed(2)+' '+(c-len).toFixed(2));seg.setAttribute('stroke-dashoffset',(-off).toFixed(2));
+    seg.setAttribute('transform','rotate(-90 60 60)');svg.append(seg);off+=len;
+   }
+  }
+  const txt=document.createElementNS(NS,'text');txt.setAttribute('x','60');txt.setAttribute('y','64');txt.setAttribute('text-anchor','middle');txt.setAttribute('font-size','18');txt.setAttribute('font-weight','700');txt.setAttribute('fill','#172e2a');txt.textContent=String(total);svg.append(txt);
+  const leg=node('div',undefined,'donut-legend');
+  for(const it of items){
+   const row=node('div',undefined,'legend-item'),left=node('span'),dot=node('span',undefined,'legend-dot');
+   dot.style.background=it.color;left.append(dot,document.createTextNode(it.lbl));
+   row.append(left,node('strong',it.val+' ('+(total?Math.round((it.val/total)*100):0)+'%)'));leg.append(row);
+  }
+  wrap.append(svg,leg);return wrap;
+ }
+ function buildMatrix(rows){
+  const grades=[...new Set(rows.map(r=>r.grade))],subjs=[...new Set(rows.map(r=>r.subject_id))];
+  const wrap=node('div',undefined,'table-wrap'),tbl=node('table'),hd=node('thead'),hr=node('tr');
+  hr.append(node('th','الصف'));for(const id of subjs)hr.append(node('th',rows.find(r=>r.subject_id===id)?.subject_name||id));
+  hd.append(hr);tbl.append(hd);const bd=node('tbody');
+  for(const g of grades){
+   const tr=node('tr');tr.append(node('td',g));
+   for(const id of subjs){
+    const match=rows.filter(r=>r.grade===g&&r.subject_id===id&&r.average!==null);
+    const td=node('td');
+    if(!match.length){td.textContent='—';}
+    else{
+     const totRec=match.reduce((s,x)=>s+x.recorded,0),wAvg=totRec?match.reduce((s,x)=>s+x.average*x.recorded,0)/totRec:null;
+     const sp=node('span',fmtPct(wAvg),'heat-cell '+(wAvg>=0.85?'heat-hi':wAvg>=0.7?'heat-mid':'heat-low'));
+     td.append(sp);
+    }
+    tr.append(td);
+   }
+   bd.append(tr);
+  }
+  tbl.append(bd);wrap.append(tbl);return wrap;
+ }
+ function classRankingList(rows){
+  const byCls={};
+  for(const r of rows){
+   if(r.average===null)continue;
+   const k=r.class_id;
+   if(!byCls[k])byCls[k]={label:r.grade+' '+r.class_name+' ('+r.section+')',sum:0,rec:0};
+   byCls[k].sum+=r.average*r.recorded;byCls[k].rec+=r.recorded;
+  }
+  return Object.values(byCls).map(x=>({label:x.label,pct:x.rec?x.sum/x.rec:0,right:fmtPct(x.rec?x.sum/x.rec:0)})).sort((a,b)=>b.pct-a.pct);
+ }
  function renderExecutive(an){
   analyticsCache=an;
   find('#live-executive')?.remove();
+  const director=currentUser?.role==='headmistress';
+  if(director&&school){
+   const stats=find('#overview .stats'),comp=school.completion||{},d=an.distribution||{},total=(d.gte90||0)+(d.r75_89||0)+(d.r50_74||0)+(d.below50||0);
+   stats.classList.add('stats-4');stats.replaceChildren();
+   const cards=[
+    ['المتوسط العام للمدرسة',fmtPct(school.average),school.students+' طالبة/طالب · '+(school.classes||0)+' فصلًا'],
+    ['اكتمال الرصد (العليا)',fmtPct(comp.completionRate),(comp.recordedEligible||0)+' من '+(comp.expectedEligible||0)+' · '+(comp.deferredClasses||0)+' مؤجلة'],
+    ['نطاق التميز (90%+)',String(d.gte90||0),(total?Math.round(((d.gte90||0)/total)*100):0)+'% من الدرجات · '+(an.topPerformers||[]).length+' بمعدل ≥95%'],
+    ['حالات الدعم (<50%)',String((an.supportWatchlist||[]).length),(total?Math.round(((d.below50||0)/total)*100):0)+'% من الدرجات المرصودة']
+   ];
+   for(const [t,v,n] of cards){const a=node('article');a.append(node('span',t),node('strong',v),node('small',n));stats.append(a);}
+  }
   const grid=node('div',undefined,'exec-grid');grid.id='live-executive';
+  const distCard=node('section',undefined,'panel exec-card');
+  distCard.append(node('h2','توزيع الدرجات الوصفي'),svgDonut(an.distribution||{}),node('p','توزيع إحصائي وصفي؛ حدود التصنيف الرسمية بانتظار اعتماد المدرسة.','muted'));
   const subjCard=node('section',undefined,'panel exec-card');
-  subjCard.append(node('h2','مقارنة المواد (الفترة الأولى)'),barList((an.bySubject||[]).map(s=>({label:s.subject_name+' ('+s.recorded+' درجة)',right:fmtPct(s.average),pct:s.average}))));
-  const gradeCard=node('section',undefined,'panel exec-card');
-  gradeCard.append(node('h2','مقارنة الصفوف والأقسام'),barList([...(an.byGrade||[]).map(g=>({label:g.grade+' ('+g.students+' طالبة/طالب)',right:fmtPct(g.average),pct:g.average})),...(an.bySection||[]).map(sec=>({label:'القسم: '+sec.section+' ('+sec.students+')',right:fmtPct(sec.average),pct:sec.average}))]));
-  grid.append(subjCard,gradeCard);
+  subjCard.append(node('h2','مقارنة المواد والأقسام'),barList([...(an.bySubject||[]).map(s=>({label:s.subject_name+' ('+s.recorded+' درجة)',right:fmtPct(s.average),pct:s.average})),...(an.bySection||[]).map(sec=>({label:'القسم: '+sec.section+' ('+sec.students+')',right:fmtPct(sec.average),pct:sec.average}))]));
+  grid.append(distCard,subjCard);
+  if(school?.classSubjectsSummary?.length){
+   const matCard=node('section',undefined,'panel exec-card exec-full');
+   matCard.append(node('h2','مصفوفة الأداء (الصف × المادة)'),buildMatrix(school.classSubjectsSummary));
+   const rankCard=node('section',undefined,'panel exec-card exec-full');
+   rankCard.append(node('h2','ترتيب الفصول حسب المتوسط العام'),barList(classRankingList(school.classSubjectsSummary)));
+   grid.append(matCard,rankCard);
+  }
   const anchor=find('#live-school');
   if(anchor)anchor.before(grid);else find('#overview').append(grid);
   if(school)renderReports(school,true);
