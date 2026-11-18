@@ -153,9 +153,14 @@
    for(const [t,v,n,cls] of cards){const a=node('article',undefined,cls||undefined);a.append(node('span',t),node('strong',v),node('small',n));stats.append(a);}
   }
   if(an.briefing?.length){
-   const bCard=node('section',undefined,'panel exec-card');bCard.style.marginBottom='20px';
-   const ul=node('ul',undefined,'brief-list');for(const line of an.briefing)ul.append(node('li',line));
-   bCard.append(node('h2','موجز القيادة التربوية — الفترة '+(an.period==='2'?'الثانية':'الأولى')),ul);wrap.append(bCard);
+   const bGrid=node('div',undefined,'brief-grid'),titles=['أعلى مادة أداءً','تركّز حالات الدعم','التعثر النوعي'],icons=['★','⚑','◈'];
+   an.briefing.slice(0,3).forEach((line,idx)=>{
+    const item=node('div',undefined,'brief-item brief-'+idx),ico=node('span',icons[idx]||'•','brief-ico'),txt=node('div');
+    ico.setAttribute('aria-hidden','true');
+    txt.append(node('b',titles[idx]||'مؤشر تربوي'),node('span',line.replace('<50%','أقل من 50%')));
+    item.append(ico,txt);bGrid.append(item);
+   });
+   wrap.append(bGrid);
   }
   const grid=node('div',undefined,'exec-grid');
   const distCard=node('section',undefined,'panel exec-card');
