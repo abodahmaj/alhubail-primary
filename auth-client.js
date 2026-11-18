@@ -16,8 +16,8 @@
    const item=pending.get(m.requestId);pending.delete(m.requestId);clearTimeout(item.timer);item.resolve(m.result);
   }
   window.addEventListener('message',receive);document.body.appendChild(frame);
-  interval=setInterval(hello,350);readyTimeout=setTimeout(()=>{readyReject(Error('BACKEND_TIMEOUT'));close();},25000);hello();
+  interval=setInterval(hello,350);readyTimeout=setTimeout(()=>{readyReject(Error('BACKEND_TIMEOUT'));close();},35000);hello();
   function close(){if(closed)return;closed=true;clearInterval(interval);clearTimeout(readyTimeout);window.removeEventListener('message',receive);frame.remove();pending.forEach(p=>{clearTimeout(p.timer);p.reject(Error('CONNECTION_CLOSED'));});pending.clear();}
-  return {ready,close,request:async function(request){await ready;if(closed)throw Error('CONNECTION_CLOSED');if(pending.size>=10)throw Error('TOO_MANY_REQUESTS');const requestId=randomId();return new Promise((resolve,reject)=>{const timer=setTimeout(()=>{pending.delete(requestId);reject(Error('REQUEST_TIMEOUT'));},30000);pending.set(requestId,{resolve,reject,timer});source.postMessage({channel,type:'request',nonce,requestId,request},origin);});}};
+  return {ready,close,request:async function(request){await ready;if(closed)throw Error('CONNECTION_CLOSED');if(pending.size>=10)throw Error('TOO_MANY_REQUESTS');const requestId=randomId();return new Promise((resolve,reject)=>{const timer=setTimeout(()=>{pending.delete(requestId);reject(Error('REQUEST_TIMEOUT'));},45000);pending.set(requestId,{resolve,reject,timer});source.postMessage({channel,type:'request',nonce,requestId,request},origin);});}};
  };
 })();
