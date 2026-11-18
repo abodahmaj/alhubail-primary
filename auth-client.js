@@ -1,6 +1,29 @@
 /* No account data or session tokens persist in browser storage. */
 (function(){'use strict';
- window.createSchoolConnection=function(url){let active=connection_(url);return {get ready(){return active.ready;},close:function(){active.close();},request:async function(req){let result=await active.request(req);if(result?.error?.code==='CONNECTION_LIMIT'){active.close();active=connection_(url);await active.ready;result=await active.request(req);}return result;}};};
+ window.createSchoolConnection=function(url){
+  if(typeof url!=='string'||!/^https:\/\/script\.google\.com\/macros\/s\/[A-Za-z0-9_-]+\/exec$/.test(url))throw Error('INVALID_BACKEND');
+  if(typeof fetch==='function'){
+   let closed=false;
+   return {
+    get ready(){return Promise.resolve();},
+    close:function(){closed=true;},
+    request:async function(req){
+     if(closed)throw Error('CONNECTION_CLOSED');
+     const ctrl=typeof AbortController==='function'?new AbortController():null;
+     const timer=ctrl?setTimeout(()=>ctrl.abort(),45000):null;
+     try{
+      const res=await fetch(url,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify(req),redirect:'follow',credentials:'omit',signal:ctrl?ctrl.signal:undefined});
+      if(!res.ok)throw Error('HTTP_'+res.status);
+      return await res.json();
+     }catch(e){
+      if(e?.name==='AbortError')throw Error('REQUEST_TIMEOUT');
+      throw e;
+     }finally{if(timer)clearTimeout(timer);}
+    }
+   };
+  }
+  let active=connection_(url);return {get ready(){return active.ready;},close:function(){active.close();},request:async function(req){let result=await active.request(req);if(result?.error?.code==='CONNECTION_LIMIT'){active.close();active=connection_(url);await active.ready;result=await active.request(req);}return result;}};
+ };
  function connection_(url){
   if(typeof url!=='string'||!/^https:\/\/script\.google\.com\/macros\/s\/[A-Za-z0-9_-]+\/exec$/.test(url))throw Error('INVALID_BACKEND');
   const channel='alhubail-auth-v1';
