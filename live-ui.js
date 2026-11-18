@@ -25,24 +25,31 @@
   }
   return list;
  }
+ function levelBadge(lvl){
+  if(lvl==='above')return node('span','فوق المتوسط','badge-good');
+  if(lvl==='mid')return node('span','متوسط','badge-mid');
+  if(lvl==='low')return node('span','منخفض','badge-warn');
+  return node('span','غير مرصود','muted');
+ }
+ function levelLabel(lvl){return lvl==='above'?'فوق المتوسط':lvl==='mid'?'متوسط':lvl==='low'?'منخفض':'غير مرصود';}
  function stackedList(items){
-  const list=node('div',undefined,'bar-list'),colors=[['gte90','#075c49'],['r75_89','#2d8a6e'],['r50_74','#d49b27'],['below50','#b83a2d']];
+  const list=node('div',undefined,'bar-list'),colors=[['above','#075c49'],['mid','#d49b27'],['low','#b83a2d']];
   for(const it of items){
    const row=node('div',undefined,'bar-row'),hd=node('div',undefined,'bar-head');
    hd.append(node('span',it.label),node('strong',it.right));
-   const trk=node('div',undefined,'stacked-track'),d=it.dist||{},tot=(d.gte90||0)+(d.r75_89||0)+(d.r50_74||0)+(d.below50||0);
+   const trk=node('div',undefined,'stacked-track'),lv=it.levels||{},tot=(lv.above||0)+(lv.mid||0)+(lv.low||0);
    if(tot){
     for(const [k,col] of colors){
-     if(!d[k])continue;
-     const seg=node('div',undefined,'stacked-seg');seg.style.width=((d[k]/tot)*100).toFixed(2)+'%';seg.style.background=col;seg.title=d[k]+' ('+Math.round((d[k]/tot)*100)+'%)';trk.append(seg);
+     if(!lv[k])continue;
+     const seg=node('div',undefined,'stacked-seg');seg.style.width=((lv[k]/tot)*100).toFixed(2)+'%';seg.style.background=col;seg.title=levelLabel(k)+': '+lv[k]+' ('+Math.round((lv[k]/tot)*100)+'%)';trk.append(seg);
     }
    }
    row.append(hd,trk);list.append(row);
   }
   return list;
  }
- function svgDonut(dist){
-  const NS='http://www.w3.org/2000/svg',items=[{lbl:'90% – 100% (تميز)',val:dist.gte90||0,color:'#075c49'},{lbl:'75% – 89% (متقدم)',val:dist.r75_89||0,color:'#2d8a6e'},{lbl:'50% – 74% (متوسط)',val:dist.r50_74||0,color:'#d49b27'},{lbl:'أقل من 50% (دعم)',val:dist.below50||0,color:'#b83a2d'}];
+ function svgDonut(lv){
+  const NS='http://www.w3.org/2000/svg',items=[{lbl:'فوق المتوسط (≥ 80%)',val:lv.above||0,color:'#075c49'},{lbl:'متوسط (50% – 79%)',val:lv.mid||0,color:'#d49b27'},{lbl:'منخفض (< 50%)',val:lv.low||0,color:'#b83a2d'}];
   const total=items.reduce((s,x)=>s+x.val,0),wrap=node('div',undefined,'donut-wrap');
   const svg=document.createElementNS(NS,'svg');svg.setAttribute('viewBox','0 0 120 120');svg.setAttribute('width','132');svg.setAttribute('height','132');svg.setAttribute('aria-hidden','true');
   const r=44,c=2*Math.PI*r;let off=0;
@@ -132,14 +139,14 @@
    return;
   }
   if(director&&school){
-   const stats=find('#overview .stats'),comp=school.completion||{},d=an.distribution||{},total=(d.gte90||0)+(d.r75_89||0)+(d.r50_74||0)+(d.below50||0);
+   const stats=find('#overview .stats'),comp=school.completion||{},lv=an.levels||{},total=(lv.above||0)+(lv.mid||0)+(lv.low||0);
    stats.classList.add('stats-4');stats.replaceChildren();
    const ov=an.overview||{};
    const cards=[
     ['المتوسط والوسيط (ف'+an.period+')',fmtPct(ov.average),'الوسيط: '+fmtPct(ov.median)+' · '+ov.students+' طالبة/طالب'],
     ['اكتمال الرصد (العليا)',fmtPct(comp.completionRate),(comp.recordedEligible||0)+' من '+(comp.expectedEligible||0)+' · '+(comp.deferredClasses||0)+' مؤجلة'],
-    ['نطاق التميز (90%+)',String(d.gte90||0),(total?Math.round(((d.gte90||0)/total)*100):0)+'% من الدرجات · '+(an.topPerformers||[]).length+' بمعدل ≥95%'],
-    ['حالات الدعم (<50%)',String((an.supportWatchlist||[]).length),(an.singleSubjectDeficit||[]).length+' تعثر نوعي بمادة واحدة']
+    ['فوق المتوسط (≥80%)',String(lv.above||0),(total?Math.round(((lv.above||0)/total)*100):0)+'% من الدرجات · متوسط: '+(lv.mid||0)],
+    ['منخفض (<50%)',String(lv.low||0),(an.singleSubjectDeficit||[]).length+' تعثر نوعي بمادة واحدة']
    ];
    for(const [t,v,n] of cards){const a=node('article');a.append(node('span',t),node('strong',v),node('small',n));stats.append(a);}
   }
@@ -150,12 +157,44 @@
   }
   const grid=node('div',undefined,'exec-grid');
   const distCard=node('section',undefined,'panel exec-card');
-  distCard.append(node('h2','توزيع الدرجات الوصفي'),svgDonut(an.distribution||{}),node('p','توزيع إحصائي وصفي؛ حدود التصنيف الرسمية بانتظار اعتماد المدرسة.','muted'));
+  distCard.append(node('h2','توزيع المستويات الثلاثة'),svgDonut(an.levels||{}),node('p','التصنيف المعتمد: فوق المتوسط (≥80%) · متوسط (50–79%) · منخفض (<50%).','muted'));
   const subjCard=node('section',undefined,'panel exec-card');
-  subjCard.append(node('h2','تمركز المستويات حسب المادة'),stackedList((an.bySubject||[]).map(s=>({label:s.subject_name+' ('+s.recorded+')',right:'متوسط '+fmtPct(s.average)+' · وسيط '+fmtPct(s.median),dist:s.dist}))));
+  subjCard.append(node('h2','المستويات على مستوى المادة'),stackedList((an.bySubject||[]).map(s=>({label:s.subject_name+' ('+s.recorded+')',right:'متوسط '+fmtPct(s.average)+' · وسيط '+fmtPct(s.median),levels:s.levels}))));
   const gradeCard=node('section',undefined,'panel exec-card exec-full');
-  gradeCard.append(node('h2','تمركز المستويات حسب الصف والأقسام'),stackedList([...(an.byGrade||[]).map(g=>({label:g.grade+' ('+g.students+' طالبة/طالب)',right:'متوسط '+fmtPct(g.average)+' · وسيط '+fmtPct(g.median),dist:g.dist})),...(an.bySection||[]).map(sec=>({label:'القسم: '+sec.section+' ('+sec.students+')',right:'متوسط '+fmtPct(sec.average),dist:sec.dist}))]));
+  gradeCard.append(node('h2','المستويات على مستوى الصفوف والأقسام'),stackedList([...(an.byGrade||[]).map(g=>({label:g.grade+' ('+g.students+' طالبة/طالب)',right:'متوسط '+fmtPct(g.average)+' · وسيط '+fmtPct(g.median),levels:g.levels})),...(an.bySection||[]).map(sec=>({label:'القسم: '+sec.section+' ('+sec.students+')',right:'متوسط '+fmtPct(sec.average),levels:sec.levels}))]));
   grid.append(distCard,subjCard,gradeCard);
+  const stRows=an.studentSummaries||[];
+  if(stRows.length){
+   const stCard=node('section',undefined,'panel exec-card exec-full');
+   const stHd=node('div',undefined,'table-top');stHd.style.padding='0 0 12px';
+   stHd.append(node('h2','تقديرات ومستويات طلاب الصف ('+stRows.length+')'));
+   const expSt=node('button','تصدير CSV','secondary');
+   stHd.append(expSt);stCard.append(stHd);
+   const sf=node('div',undefined,'exec-filters'),sg=node('select'),sc=node('select'),sl=node('select'),sq=node('input');
+   sq.type='search';sq.placeholder='بحث باسم الطالب/ة…';
+   populate(sg,[...new Set(stRows.map(r=>r.grade))].map(g=>({value:g,label:g})),'جميع الصفوف');
+   populate(sc,[...new Set(stRows.map(r=>r.class_name))].map(x=>({value:x,label:'فصل '+x})),'جميع الفصول');
+   populate(sl,[{value:'above',label:'فوق المتوسط'},{value:'mid',label:'متوسط'},{value:'low',label:'منخفض'}],'جميع المستويات');
+   sf.append(sg,sc,sl,sq);stCard.append(sf);
+   const sWrap=node('div',undefined,'table-wrap');sWrap.style.marginTop='14px';sWrap.style.maxHeight='420px';
+   const sTbl=node('table'),sHead=node('thead'),sHr=node('tr');
+   for(const h of ['الاسم','الصف','الفصل','لغتي','رياضيات','علوم','إنجليزي','المعدل','التقدير'])sHr.append(node('th',h));
+   sHead.append(sHr);sTbl.append(sHead);const sBd=node('tbody');sTbl.append(sBd);sWrap.append(sTbl);stCard.append(sWrap);
+   let curList=stRows;
+   function drawStudents(){
+    const q=sq.value.trim();
+    curList=stRows.filter(r=>(!sg.value||r.grade===sg.value)&&(!sc.value||r.class_name===sc.value)&&(!sl.value||r.level===sl.value)&&(!q||r.name.includes(q)));
+    sBd.replaceChildren();
+    for(const r of curList.slice(0,120)){
+     const tr=node('tr'),tdLvl=node('td');tdLvl.append(levelBadge(r.level));
+     tr.append(node('td',r.name),node('td',r.grade),node('td',r.class_name+' ('+r.section+')'),node('td',r.scores.ARB??'—'),node('td',r.scores.MAT??'—'),node('td',r.scores.SCI??'—'),node('td',r.scores.ENG??'—'),node('td',fmtPct(r.average)),tdLvl);
+     sBd.append(tr);
+    }
+   }
+   expSt.addEventListener('click',()=>downloadCsv('alhubail-students-levels.csv',['الاسم','الصف','الفصل','القسم','لغتي','رياضيات','علوم','إنجليزي','المعدل','التقدير'],curList.map(r=>[r.name,r.grade,r.class_name,r.section,r.scores.ARB??'',r.scores.MAT??'',r.scores.SCI??'',r.scores.ENG??'',fmtPct(r.average),levelLabel(r.level)])));
+   sg.addEventListener('change',drawStudents);sc.addEventListener('change',drawStudents);sl.addEventListener('change',drawStudents);sq.addEventListener('input',drawStudents);
+   drawStudents();grid.append(stCard);
+  }
   const csRows=an.byClassSubject||[];
   if(csRows.length){
    const fltCard=node('section',undefined,'panel exec-card exec-full');
@@ -185,6 +224,7 @@
   school=data;const director=currentUser.role==='headmistress';find('.environment').textContent='جلسة موثقة · '+(director?'مديرة المدرسة':'معلمة');find('.toolbar .pill').textContent=currentUser.display_name;
   find('#overview .heading h1').textContent=director?'متابعة أداء المدرسة':'متابعة فصولي وموادي';find('#overview .heading p').textContent='البيانات من قاعدة المدرسة. لا تُحسب الدرجة غير المرصودة صفرًا.';
   const stats=find('#overview .stats');stats.replaceChildren();const comp=data.completion||{};const pct=comp.completionRate!==null&&comp.completionRate!==undefined?Math.round(comp.completionRate*100)+'%':'—';const recNote=data.recordedSuppressed?'حماية خصوصية المجموعات الصغيرة':comp.expectedEligible?'اكتمال الرصد: '+pct+' ('+comp.recordedEligible+' / '+comp.expectedEligible+')':'لا تقييمات معتمدة حتى إضافتها';const clsNote=comp.deferredClasses?comp.deferredClasses+' فصول (الأول والثاني) مؤجلة':'حسب توزيع المدرسة';for(const [title,value,note] of [['الطلاب والطالبات',data.students,'مؤشر عام للمدرسة دون أسماء'],['الفصول',data.classes,clsNote],['الدرجات المرصودة',data.recordedSuppressed?'محجوب':data.recorded,recNote]]){const a=node('article');a.append(node('span',title),node('strong',String(value)),node('small',note));stats.append(a);}
+  const ovGrid=find('#overview .overview-grid');if(ovGrid)ovGrid.hidden=director;
   const empty=find('#overview .overview-grid .panel .empty');empty.replaceChildren(node('h3',director?'جميع فصول المدرسة':'الفصول المسندة إليكِ'),node('p',director?'التفاصيل الفردية متاحة للمديرة. المعلمات لم تُضف حساباتهن بعد.':data.accessibleClasses.length?'التفاصيل الفردية تخص موادك وفصولك فقط.':'لا يوجد إسناد حتى الآن؛ ستتولى الإدارة ربط المواد والفصول.'));
   find('#overview .panel-title .pill').textContent='متصل';find('#exit').textContent='تسجيل الخروج';find('#preview').hidden=true;
   const account=find('#account .empty');account.replaceChildren(node('h2',currentUser.display_name),node('p',director?'الصلاحية: مديرة المدرسة — جميع الفصول. إدارة المعلمات والإسناد ستفعّل عند توفير بياناتهن.':'الصلاحية: معلمة — التفاصيل الفردية لفصولك وموادك فقط، والمؤشرات العامة للمدرسة دون أسماء بقية الطلاب.'));
@@ -228,9 +268,9 @@
       if(!card.student){out.textContent='لم يُعثر على السجل.';return;}
       const info=node('p',[card.student.name,card.student.grade,card.student.class_name,card.student.section].join(' — '));
       const wrap=node('div',undefined,'table-wrap'),tbl=node('table'),hd=node('thead'),hr=node('tr');
-      for(const h of ['المادة','الفترة','الدرجة','الحالة'])hr.append(node('th',h));hd.append(hr);tbl.append(hd);
+      for(const h of ['المادة','الفترة','الدرجة','التقدير'])hr.append(node('th',h));hd.append(hr);tbl.append(hd);
       const bd=node('tbody');
-      for(const sc of card.scores){const tr=node('tr');tr.append(node('td',sc.subject_name),node('td','الفترة '+sc.period),node('td',fmtScore(sc.score,sc.max_score)),node('td',sc.score===null?'غير مرصود':'مرصود'));bd.append(tr);}
+      for(const sc of card.scores){const tr=node('tr'),tdL=node('td');tdL.append(levelBadge(sc.level));tr.append(node('td',sc.subject_name),node('td','الفترة '+sc.period),node('td',fmtScore(sc.score,sc.max_score)),tdL);bd.append(tr);}
       tbl.append(bd);wrap.append(tbl);out.replaceChildren(info,wrap,node('p','حدود تصنيف الأداء بانتظار اعتماد المدرسة.','notice'));
      }catch(_){out.textContent='تعذر تحميل البطاقة.';}finally{go.disabled=false;}
     });
@@ -308,9 +348,9 @@
       try{
        const rep=await api('report',{class_id:r.class_id,subject_id:r.subject_id});
        const dWrap=node('div',undefined,'table-wrap'),dTbl=node('table'),dHd=node('thead'),dHr=node('tr');
-       for(const h of ['م','الاسم','الدرجة','الحالة'])dHr.append(node('th',h));dHd.append(dHr);dTbl.append(dHd);
+       for(const h of ['م','الاسم','الدرجة','التقدير'])dHr.append(node('th',h));dHd.append(dHr);dTbl.append(dHd);
        const dBd=node('tbody');
-       rep.students.forEach((st,idx)=>{const sr=node('tr');sr.append(node('td',String(idx+1)),node('td',st.name),node('td',fmtScore(st.score,st.max_score)),node('td',st.score===null?'غير مرصود':'مرصود'));dBd.append(sr);});
+       rep.students.forEach((st,idx)=>{const sr=node('tr'),tdL=node('td');tdL.append(levelBadge(st.level));sr.append(node('td',String(idx+1)),node('td',st.name),node('td',fmtScore(st.score,st.max_score)),tdL);dBd.append(sr);});
        dTbl.append(dBd);dWrap.append(dTbl);
        detail.replaceChildren(node('h3',rep.grade+' '+rep.class_name+' ('+rep.section+') — '+rep.subject_name+' · المتوسط: '+fmtPct(rep.average)),dWrap);
       }catch(_){detail.textContent='تعذر تحميل الكشف.';}finally{btn.disabled=false;}
