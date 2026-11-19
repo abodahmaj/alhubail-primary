@@ -474,7 +474,21 @@
   document.querySelectorAll('[data-report]').forEach(b=>b.addEventListener('click',()=>{activeTab=b.dataset.report;draw();}));
   draw();
  }
- find('#login-form').addEventListener('submit',async e=>{e.preventDefault();if(!configured)return;const button=find('#login-submit');button.disabled=true;feedback.textContent='جارٍ التحقق من الاتصال والحساب…';let success=false;try{const username=find('#username').value,password=find('#password').value;const r=await connect().request({action:'login',payload:{username,password}});find('#password').value='';if(!r?.ok){feedback.textContent=r?.error?.code==='NOT_READY'?'حساب المديرة لم يُهيأ بعد. أكملي إعداد الحساب من ملف القاعدة.':'تعذر تسجيل الدخول. تحققي من البيانات أو حاولي لاحقًا.';return;}token=r.data.token;currentUser=r.data.user;saveToken(token);const summary=await api('summary');liveSummary(summary);if(currentUser.role==='headmistress')api('analytics',{period:'1'}).then(renderExecutive).catch(()=>{});find('#login').hidden=true;find('#workspace').hidden=false;find('.skip').href='#workspace-main';page('overview');success=true;}catch(e){const code=e?.message||'';feedback.textContent=code==='BACKEND_TIMEOUT'?'تعذر تهيئة جسر الاتصال بالخدمة (BACKEND_TIMEOUT). تأكدي من السماح للإطارات وملفات الارتباط أو حدّثي الصفحة.':code==='REQUEST_TIMEOUT'?'انتهت مهلة الرد من الخادم (REQUEST_TIMEOUT). أعيدي المحاولة بعد لحظات.':'تعذر الاتصال بالخدمة'+(code?' ('+code+')':'')+'. لم يتم تسجيل الدخول.';if(connection){connection.close();connection=null;}token=null;currentUser=null;saveToken(null);}finally{find('#password').value='';button.disabled=false;if(!success)find('#login').hidden=false;}});
+ async function loadWorkspaceParallel(){
+  const exOld=find('#live-executive');if(exOld)exOld.remove();
+  const skHost=node('div');skHost.id='live-executive';skHost.style.marginTop='24px';
+  skHost.append(skeletonBlock('cards'));
+  const anchor=find('#live-school');if(anchor)anchor.before(skHost);else find('#overview').append(skHost);
+  const isDir=currentUser?.role==='headmistress';
+  const [sumRes,anRes]=await Promise.allSettled([
+   api('summary'),
+   isDir?api('analytics',{period:'1'}):Promise.resolve(null)
+  ]);
+  if(sumRes.status==='rejected')throw sumRes.reason;
+  liveSummary(sumRes.value);
+  if(isDir&&anRes.status==='fulfilled'&&anRes.value)renderExecutive(anRes.value);
+ }
+ find('#login-form').addEventListener('submit',async e=>{e.preventDefault();if(!configured)return;const button=find('#login-submit');button.disabled=true;feedback.textContent='جارٍ التحقق من الحساب…';let success=false;try{const username=find('#username').value,password=find('#password').value;const r=await connect().request({action:'login',payload:{username,password}});find('#password').value='';if(!r?.ok){feedback.textContent=r?.error?.code==='NOT_READY'?'حساب المديرة لم يُهيأ بعد. أكملي إعداد الحساب من ملف القاعدة.':'تعذر تسجيل الدخول. تحققي من البيانات أو حاولي لاحقًا.';return;}token=r.data.token;currentUser=r.data.user;saveToken(token);find('#login').hidden=true;find('#workspace').hidden=false;find('.skip').href='#workspace-main';page('overview');success=true;await loadWorkspaceParallel();}catch(e){const code=e?.message||'';feedback.textContent=code==='BACKEND_TIMEOUT'?'تعذر تهيئة جسر الاتصال بالخدمة (BACKEND_TIMEOUT). تأكدي من السماح للإطارات وملفات الارتباط أو حدّثي الصفحة.':code==='REQUEST_TIMEOUT'?'انتهت مهلة الرد من الخادم (REQUEST_TIMEOUT). أعيدي المحاولة بعد لحظات.':'تعذر الاتصال بالخدمة'+(code?' ('+code+')':'')+'. لم يتم تسجيل الدخول.';if(!success){if(connection){connection.close();connection=null;}token=null;currentUser=null;saveToken(null);find('#workspace').hidden=true;find('#login').hidden=false;}}finally{find('#password').value='';button.disabled=false;}});
  async function doLogout(e){if(!token)return;if(e)e.stopImmediatePropagation();const oldToken=token;token=null;currentUser=null;school=null;analyticsCache=null;saveToken(null);if(find('#exit-top'))find('#exit-top').hidden=true;find('#overview .stats')?.classList.remove('stats-4');find('#live-school')?.remove();find('#live-reports')?.remove();find('#live-executive')?.remove();find('#workspace').hidden=true;find('#login').hidden=false;feedback.textContent='جارٍ إنهاء الجلسة…';try{const r=await connection.request({action:'logout',token:oldToken});if(!r?.ok)feedback.textContent='أُغلقت الجلسة محليًا؛ تعذر تأكيد إلغائها في الخادم.';else feedback.textContent='تم تسجيل الخروج.';}catch(_){feedback.textContent='أُغلقت الجلسة محليًا؛ تعذر تأكيد إلغائها في الخادم.';}finally{if(connection)connection.close();connection=null;try{sessionStorage.setItem('alhubail-logout-note',feedback.textContent);}catch(_){}location.reload();}}
  find('#exit').addEventListener('click',doLogout,true);
  find('#exit-top')?.addEventListener('click',doLogout);
@@ -485,11 +499,17 @@
   if(!saved||!/^[a-f0-9]{64}$/.test(saved))return;
   token=saved;const btn=find('#login-submit');btn.disabled=true;feedback.textContent='جارٍ استعادة الجلسة…';
   try{
-   const s=await api('session');currentUser=s.user;
-   const summary=await api('summary');liveSummary(summary);
-   if(currentUser.role==='headmistress')api('analytics',{period:'1'}).then(renderExecutive).catch(()=>{});
+   const [sesRes,sumRes]=await Promise.allSettled([api('session'),api('summary')]);
+   if(sesRes.status==='rejected')throw sesRes.reason;
+   currentUser=sesRes.value.user;
    find('#login').hidden=true;find('#workspace').hidden=false;find('.skip').href='#workspace-main';page('overview');
-  }catch(_){token=null;currentUser=null;saveToken(null);if(feedback.textContent==='جارٍ استعادة الجلسة…')feedback.textContent='الدخول للحسابات المعتمدة فقط.';}
+   if(sumRes.status==='fulfilled'){
+    liveSummary(sumRes.value);
+    if(currentUser.role==='headmistress')api('analytics',{period:'1'}).then(renderExecutive).catch(()=>{});
+   }else{
+    await loadWorkspaceParallel();
+   }
+  }catch(e){if(e?.message==='UNAUTHORIZED'||e?.message==='SESSION_EXPIRED'){token=null;currentUser=null;saveToken(null);}find('#workspace').hidden=true;find('#login').hidden=false;if(feedback.textContent==='جارٍ استعادة الجلسة…')feedback.textContent='الدخول للحسابات المعتمدة فقط.';}
   finally{btn.disabled=false;}
  })();
  (() => {
