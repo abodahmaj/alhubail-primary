@@ -2,7 +2,7 @@
  const find=s=>document.querySelector(s),feedback=find('#login-feedback');let connection=null,token=null,currentUser=null,school=null;
  const configured=typeof window.SCHOOL_BACKEND_URL==='string'&&window.SCHOOL_BACKEND_URL.length>0;
  const SESSION_KEY='alhubail-session-token';
- function saveToken(t){try{if(t)sessionStorage.setItem(SESSION_KEY,t);else sessionStorage.removeItem(SESSION_KEY);}catch(_){}}
+ function saveToken(t){try{if(t)localStorage.setItem(SESSION_KEY,t);else{localStorage.removeItem(SESSION_KEY);sessionStorage.removeItem(SESSION_KEY);}}catch(_){}}
  if(configured){find('.environment').textContent='اتصال مهيأ · تسجيل الدخول مطلوب';find('#username').disabled=false;find('#username').required=true;find('#password').disabled=false;find('#password').required=true;find('#login-submit').disabled=false;feedback.textContent='الدخول للحسابات المعتمدة فقط.';connect().ready.catch(()=>{if(connection){connection.close();connection=null;}});}
  try{const note=sessionStorage.getItem('alhubail-logout-note');if(note){feedback.textContent=note;sessionStorage.removeItem('alhubail-logout-note');}}catch(_){}
  function connect(){if(!connection)connection=window.createSchoolConnection(window.SCHOOL_BACKEND_URL);return connection;}
@@ -495,7 +495,7 @@
  setInterval(()=>{if(token)api('session').catch(()=>{});},900000);
  (async()=>{
   if(!configured)return;
-  let saved=null;try{saved=sessionStorage.getItem(SESSION_KEY);}catch(_){}
+  let saved=null;try{saved=localStorage.getItem(SESSION_KEY)||sessionStorage.getItem(SESSION_KEY);}catch(_){}
   if(!saved||!/^[a-f0-9]{64}$/.test(saved))return;
   token=saved;const btn=find('#login-submit');btn.disabled=true;feedback.textContent='جارٍ استعادة الجلسة…';
   try{
