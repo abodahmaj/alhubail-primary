@@ -28,10 +28,48 @@
   return list;
  }
  function levelBadge(lvl){
-  if(lvl==='above')return node('span','فوق المتوسط','badge-good');
-  if(lvl==='mid')return node('span','متوسط','badge-mid');
-  if(lvl==='low')return node('span','منخفض','badge-warn');
+  if(lvl==='above')return node('span','✓ فوق المتوسط','badge-good');
+  if(lvl==='mid')return node('span','• متوسط','badge-mid');
+  if(lvl==='low')return node('span','⚑ منخفض','badge-warn');
   return node('span','غير مرصود','muted');
+ }
+ function skeletonBlock(kind){
+  const wrap=node('div',undefined,'skeleton-wrap');
+  wrap.setAttribute('aria-busy','true');
+  if(kind==='cards'){
+   const grid=node('div',undefined,'skeleton-grid');
+   for(let i=0;i<3;i++){const c=node('div',undefined,'skeleton-card');c.append(node('div',undefined,'skeleton-line w-40'),node('div',undefined,'skeleton-line h-lg'),node('div',undefined,'skeleton-line w-85'));grid.append(c);}
+   wrap.append(grid);
+  }else if(kind==='card'){
+   const c=node('div',undefined,'skeleton-card');
+   c.append(node('div',undefined,'skeleton-line w-65'),node('div',undefined,'skeleton-line w-40'),node('div',undefined,'skeleton-row'),node('div',undefined,'skeleton-row'));
+   wrap.append(c);
+  }else{
+   for(let i=0;i<5;i++)wrap.append(node('div',undefined,'skeleton-row'));
+  }
+  return wrap;
+ }
+ function printCertificates(list){
+  if(!list||!list.length)return;
+  find('#print-sheet')?.remove();
+  const sheet=node('div',undefined,'print-only');sheet.id='print-sheet';
+  for(const x of list){
+   const page=node('section',undefined,'cert-page');
+   const hdr=node('div',undefined,'cert-header');
+   hdr.append(node('span','المملكة العربية السعودية · وزارة التعليم'),node('span','ابتدائية الحبيل'));
+   const title=node('h1','شهادة شكر وتفوق','cert-title');
+   const sub=node('p','تمنح إدارة ابتدائية الحبيل هذه الشهادة للطالبة / الطالب:','muted');
+   const nm=node('div',x.name,'cert-name');
+   const body=node('p','تقديرًا للتفوق الدراسي والتميز الملحوظ في '+x.grade+' ('+x.class_name+' — '+x.section+') بتحقيق معدل '+fmtPct(x.average)+' في '+x.subjectsCount+' مواد خلال الفترة الدراسية المعتمدة.','cert-body');
+   const ftr=node('div',undefined,'cert-footer');
+   ftr.append(node('span','إدارة ابتدائية الحبيل'),node('span','صمم بواسطة أ. أفراح عسيري'));
+   page.append(hdr,title,sub,nm,body,ftr);sheet.append(page);
+  }
+  document.body.append(sheet);
+  document.body.classList.add('printing-sheet');
+  const cleanup=()=>{document.body.classList.remove('printing-sheet');sheet.remove();window.removeEventListener('afterprint',cleanup);};
+  window.addEventListener('afterprint',cleanup);
+  window.print();
  }
  function levelLabel(lvl){return lvl==='above'?'فوق المتوسط':lvl==='mid'?'متوسط':lvl==='low'?'منخفض':'غير مرصود';}
  function stackedList(items){
@@ -74,21 +112,34 @@
   }
   wrap.append(svg,leg);return wrap;
  }
- function buildMatrix(rows){
-  const grades=[...new Set(rows.map(r=>r.grade))],subjs=[...new Set(rows.map(r=>r.subject_id))];
+ function buildMatrix(rows,onCellSelect){
+  const byClass=[...new Set(rows.map(r=>r.grade))].length===1;
+  const rowKeys=byClass?[...new Set(rows.map(r=>r.class_id))]:[...new Set(rows.map(r=>r.grade))];
+  const subjs=[...new Set(rows.map(r=>r.subject_id))];
   const wrap=node('div',undefined,'table-wrap'),tbl=node('table'),hd=node('thead'),hr=node('tr');
-  hr.append(node('th','الصف'));for(const id of subjs)hr.append(node('th',rows.find(r=>r.subject_id===id)?.subject_name||id));
+  hr.append(node('th',byClass?'الفصل':'الصف'));
+  for(const id of subjs)hr.append(node('th',rows.find(r=>r.subject_id===id)?.subject_name||id));
   hd.append(hr);tbl.append(hd);const bd=node('tbody');
-  for(const g of grades){
-   const tr=node('tr');tr.append(node('td',g));
+  for(const rk of rowKeys){
+   const tr=node('tr');
+   const rowSample=byClass?rows.find(r=>r.class_id===rk):null;
+   tr.append(node('td',byClass?(rowSample.grade+' '+rowSample.class_name+' ('+rowSample.section+')'):rk));
    for(const id of subjs){
-    const match=rows.filter(r=>r.grade===g&&r.subject_id===id&&r.average!==null);
+    const match=rows.filter(r=>(byClass?r.class_id===rk:r.grade===rk)&&r.subject_id===id&&r.average!==null);
     const td=node('td');
     if(!match.length){td.textContent='—';}
     else{
      const totRec=match.reduce((s,x)=>s+x.recorded,0),wAvg=totRec?match.reduce((s,x)=>s+x.average*x.recorded,0)/totRec:null;
-     const sp=node('span',fmtPct(wAvg),'heat-cell '+(wAvg>=0.85?'heat-hi':wAvg>=0.7?'heat-mid':'heat-low'));
-     td.append(sp);
+     const cls=wAvg>=0.85?'heat-hi':wAvg>=0.7?'heat-mid':wAvg>=0.5?'heat-low':'heat-danger';
+     const sym=wAvg>=0.85?'✓':wAvg>=0.7?'•':wAvg>=0.5?'⚑':'!';
+     if(onCellSelect){
+      const btn=node('button',sym+' '+fmtPct(wAvg),'heat-btn '+cls);btn.type='button';
+      btn.title=byClass?'عرض كشف هذا الفصل والمادة':'تصفية فصول '+rk+' في هذه المادة';
+      btn.addEventListener('click',()=>onCellSelect(byClass?rowSample.grade:rk,id,match));
+      td.append(btn);
+     }else{
+      td.append(node('span',sym+' '+fmtPct(wAvg),'heat-cell '+cls));
+     }
     }
     tr.append(td);
    }
@@ -109,7 +160,9 @@
  async function loadPeriodAnalytics(p){
   activePeriod=p;
   if(periodCache[p]){renderExecutive(periodCache[p]);return;}
-  try{const an=await api('analytics',{period:p});periodCache[p]=an;renderExecutive(an);}catch(_){}
+  const ex=find('#live-executive');
+  if(ex){ex.querySelector('.exec-grid,.kpi-band,.notice')?.remove();ex.append(skeletonBlock('cards'));}
+  try{const an=await api('analytics',{period:p});periodCache[p]=an;renderExecutive(an);}catch(_){ex?.querySelector('.skeleton-wrap')?.remove();}
  }
  function renderExecutive(an){
   analyticsCache=an;
@@ -117,12 +170,15 @@
   find('#live-executive')?.remove();
   const director=currentUser?.role==='headmistress';
   const wrap=node('div');wrap.id='live-executive';wrap.style.marginTop='24px';
-  const pbar=node('div',undefined,'period-bar'),pills=node('div',undefined,'period-pills');
+  const pbar=node('div',undefined,'period-bar'),pills=node('div',undefined,'period-pills'),actionsBox=node('div',undefined,'exec-actions');
   for(const [p,lbl] of [['1','الفترة الأولى'],['2','الفترة الثانية'],['compare','مقارنة الفترتين']]){
    const b=node('button',lbl,'secondary');b.setAttribute('aria-pressed',String((an.period||'1')===p));
    b.addEventListener('click',()=>loadPeriodAnalytics(p));pills.append(b);
   }
-  pbar.append(node('h2','لوحة المتابعة الأكاديمية للمديرة'),pills);wrap.append(pbar);
+  const printExec=node('button','طباعة ملخص الإدارة','secondary');printExec.type='button';
+  printExec.addEventListener('click',()=>window.print());
+  actionsBox.append(pills,printExec);
+  pbar.append(node('h2','لوحة المتابعة الأكاديمية للمديرة'),actionsBox);wrap.append(pbar);
   if(an.period==='compare'){
    if(!an.comparisonAvailable){
     wrap.append(node('p','لا تتوفر بيانات مكتملة للفترة الثانية بعد؛ تُفعّل مقارنة الفترتين والانتقال بين المستويات تلقائيًا للطلاب ذوي القياسين المتوافقين فقط.','notice'));
@@ -161,6 +217,19 @@
     item.append(ico,txt);bGrid.append(item);
    });
    wrap.append(bGrid);
+  }
+  const wlList=an.supportWatchlist||[];
+  if(wlList.length){
+   const byStu={};
+   for(const x of wlList){const k=x.name+'|'+x.grade+'|'+x.class_name;if(!byStu[k])byStu[k]={name:x.name,grade:x.grade,cls:x.class_name,subjs:[]};byStu[k].subjs.push(x.subject_name);}
+   const multi=Object.values(byStu).filter(s=>s.subjs.length>=2).sort((a,b)=>b.subjs.length-a.subjs.length);
+   if(multi.length){
+    const pa=node('div',undefined,'priority-alert');
+    pa.append(node('h3','⚑ أولوية التدخل المبكر: تعثر في أكثر من مادة ('+multi.length+')'),node('p','طلاب وطالبات يحتاجون خطة دعم مركزة لتجاوز الصعوبات في أكثر من مادة:','muted'));
+    const chips=node('div',undefined,'priority-chips');
+    for(const m of multi.slice(0,12))chips.append(node('span',m.name+' ('+m.grade+' '+m.cls+') — '+m.subjs.join('، '),'priority-chip'));
+    pa.append(chips);wrap.append(pa);
+   }
   }
   const grid=node('div',undefined,'exec-grid');
   const distCard=node('section',undefined,'panel exec-card');
@@ -214,11 +283,30 @@
    populate(mSel,[...new Set(csRows.map(r=>r.subject_id))].map(id=>({value:id,label:csRows.find(r=>r.subject_id===id)?.subject_name||id})),'جميع المواد');
    fBar.append(gSel,sSel,mSel);fltCard.append(fBar);
    const body=node('div');body.style.marginTop='16px';fltCard.append(body);
+   const drillBox=node('div');drillBox.style.marginTop='16px';drillBox.setAttribute('aria-live','polite');fltCard.append(drillBox);
+   async function openMatrixDrill(match){
+    if(!match||!match.length)return;
+    if(match.length===1){
+     const target=match[0];
+     drillBox.replaceChildren(node('h3','جارٍ تحميل كشف '+target.grade+' '+target.class_name+' — '+target.subject_name+'…'),skeletonBlock('table'));
+     try{
+      const rep=await api('report',{class_id:target.class_id,subject_id:target.subject_id});
+      const dWrap=node('div',undefined,'table-wrap'),dTbl=node('table'),dHd=node('thead'),dHr=node('tr');
+      for(const h of ['م','الاسم','الدرجة','التقدير'])dHr.append(node('th',h));dHd.append(dHr);dTbl.append(dHd);
+      const dBd=node('tbody');
+      rep.students.forEach((st,idx)=>{const sr=node('tr'),tdL=node('td');tdL.append(levelBadge(st.level));sr.append(node('td',String(idx+1)),node('td',st.name),node('td',fmtScore(st.score,st.max_score)),tdL);dBd.append(sr);});
+      dTbl.append(dBd);dWrap.append(dTbl);
+      drillBox.replaceChildren(node('h3',rep.grade+' '+rep.class_name+' ('+rep.section+') — '+rep.subject_name+' · المتوسط: '+fmtPct(rep.average)),dWrap);
+     }catch(_){drillBox.replaceChildren(node('p','تعذر تحميل الكشف التفصيلي.','notice'));}
+     return;
+    }
+    const g=match[0].grade;if(gSel.value!==g){gSel.value=g;drawFiltered();}
+   }
    function drawFiltered(){
     const sub=csRows.filter(r=>(!gSel.value||r.grade===gSel.value)&&(!sSel.value||r.section===sSel.value)&&(!mSel.value||r.subject_id===mSel.value));
-    body.replaceChildren();
+    body.replaceChildren();drillBox.replaceChildren();
     if(!sub.length){body.append(node('p','لا توجد نتائج مطابقة للتصفية.','muted'));return;}
-    body.append(buildMatrix(sub),node('h3','ترتيب الفصول المطابقة'),barList(classRankingList(sub)));
+    body.append(node('p','اضغطي على أي خلية في خريطة الحرارة لعرض فصول الصف أو كشف المادة مباشرة.','muted'),buildMatrix(sub,(_g,_id,match)=>openMatrixDrill(match)),node('h3','ترتيب الفصول المطابقة'),barList(classRankingList(sub)));
    }
    gSel.addEventListener('change',drawFiltered);sSel.addEventListener('change',drawFiltered);mSel.addEventListener('change',drawFiltered);
    drawFiltered();grid.append(fltCard);
@@ -241,7 +329,7 @@
   find('#live-school')?.remove();const panel=node('section',undefined,'panel');panel.id='live-school';panel.style.marginTop='24px';const title=node('div',undefined,'panel-title');title.append(node('h2','استعراض الطلاب والطالبات حسب الصلاحية'));panel.append(title);
   const filters=node('div',undefined,'filters'),classLabel=node('label','الفصل والقسم'),classes=node('select'),subjectLabel=node('label','المادة'),subjects=node('select'),button=node('button','عرض القائمة','primary');classes.id='live-class';subjects.id='live-subject';populate(classes,data.accessibleClasses.map(c=>({value:c.class_id,label:[c.grade,c.class_name,c.section].join(' — ')})),'اختاري الفصل');populate(subjects,[],'اختاري الفصل أولًا');classLabel.append(classes);subjectLabel.append(subjects);filters.append(classLabel,subjectLabel,button);panel.append(filters);const result=node('div',undefined,'empty');result.setAttribute('aria-live','polite');result.textContent='لا تظهر أسماء قبل اختيار فصل ومادة مصرحين.';panel.append(result);find('#overview').append(panel);
   classes.addEventListener('change',()=>{const allowed=director?data.subjectList:data.subjectList.filter(s=>data.assignments.some(a=>a.class_id===classes.value&&a.subject_id===s.subject_id));populate(subjects,allowed.map(s=>({value:s.subject_id,label:s.name})),'اختاري المادة');result.replaceChildren(node('p','اختاري المادة ثم اعرضي القائمة.'));});
-  button.addEventListener('click',async()=>{if(!classes.value||!subjects.value){result.textContent='اختاري الفصل والمادة أولًا.';return;}button.disabled=true;result.textContent='جارٍ تحميل القائمة…';try{const r=await api('roster',{class_id:classes.value,subject_id:subjects.value});const wrap=node('div',undefined,'table-wrap'),table=node('table'),head=node('thead'),tr=node('tr');tr.append(node('th','م'),node('th','الاسم'));head.append(tr);table.append(head);const body=node('tbody');r.students.forEach((s,i)=>{const row=node('tr');row.append(node('td',String(i+1)),node('td',s.name));body.append(row);});table.append(body);wrap.append(table);result.replaceChildren(node('p','عدد السجلات: '+r.students.length),wrap);}catch(e){result.textContent='تعذر عرض القائمة. تحققي من الجلسة والصلاحيات.';}finally{button.disabled=false;}});
+  button.addEventListener('click',async()=>{if(!classes.value||!subjects.value){result.textContent='اختاري الفصل والمادة أولًا.';return;}button.disabled=true;result.replaceChildren(skeletonBlock('table'));try{const r=await api('roster',{class_id:classes.value,subject_id:subjects.value});const wrap=node('div',undefined,'table-wrap'),table=node('table'),head=node('thead'),tr=node('tr');tr.append(node('th','م'),node('th','الاسم'));head.append(tr);table.append(head);const body=node('tbody');r.students.forEach((s,i)=>{const row=node('tr');row.append(node('td',String(i+1)),node('td',s.name));body.append(row);});table.append(body);wrap.append(table);result.replaceChildren(node('p','عدد السجلات: '+r.students.length),wrap);}catch(e){result.textContent='تعذر عرض القائمة. تحققي من الجلسة والصلاحيات.';}finally{button.disabled=false;}});
   find('#report-message').textContent=data.recorded?'':'لا درجات في قاعدة الويب حتى الآن. لا يمكن استنتاج مستوى أو تحسن قبل رصد التقييمات.';
   renderReports(data,director);
  }
@@ -272,16 +360,19 @@
     });
     go.addEventListener('click',async()=>{
      if(!sSel.value){out.textContent='اختاري الطالبة / الطالب أولًا.';return;}
-     go.disabled=true;out.textContent='جارٍ تحميل البطاقة…';
+     go.disabled=true;out.replaceChildren(skeletonBlock('card'));
      try{
       const card=await api('studentCard',{student_id:sSel.value});
       if(!card.student){out.textContent='لم يُعثر على السجل.';return;}
-      const info=node('p',[card.student.name,card.student.grade,card.student.class_name,card.student.section].join(' — '));
+      const headRow=node('div',undefined,'table-top');headRow.style.padding='16px 0 8px';
+      headRow.append(node('strong',[card.student.name,card.student.grade,card.student.class_name,card.student.section].join(' — ')));
+      const pCardBtn=node('button','طباعة البطاقة','secondary');pCardBtn.type='button';pCardBtn.addEventListener('click',()=>window.print());
+      headRow.append(pCardBtn);
       const wrap=node('div',undefined,'table-wrap'),tbl=node('table'),hd=node('thead'),hr=node('tr');
       for(const h of ['المادة','الفترة','الدرجة','التقدير'])hr.append(node('th',h));hd.append(hr);tbl.append(hd);
       const bd=node('tbody');
       for(const sc of card.scores){const tr=node('tr'),tdL=node('td');tdL.append(levelBadge(sc.level));tr.append(node('td',sc.subject_name),node('td','الفترة '+sc.period),node('td',fmtScore(sc.score,sc.max_score)),tdL);bd.append(tr);}
-      tbl.append(bd);wrap.append(tbl);out.replaceChildren(info,wrap,node('p','حدود تصنيف الأداء بانتظار اعتماد المدرسة.','notice'));
+      tbl.append(bd);wrap.append(tbl);out.replaceChildren(headRow,wrap,node('p','حدود تصنيف الأداء بانتظار اعتماد المدرسة.','notice'));
      }catch(_){out.textContent='تعذر تحميل البطاقة.';}finally{go.disabled=false;}
     });
     return;
@@ -337,14 +428,21 @@
      sTbl.append(sBd);sWrap.append(sTbl);host.append(sWrap);
     }
     const tpTitle=node('div',undefined,'table-top');tpTitle.append(node('h3','لوحة التميز (متوسط ≥ 95%: '+tp.length+' طالب وطالبة)'));
+    const tpBtns=node('div',undefined,'exec-actions');
     const expTp=node('button','تصدير المتفوقين CSV','secondary');
     expTp.addEventListener('click',()=>downloadCsv('alhubail-top-performers.csv',['الاسم','الصف','الفصل','القسم','المعدل','عدد المواد'],tp.map(x=>[x.name,x.grade,x.class_name,x.section,fmtPct(x.average),x.subjectsCount])));
-    tpTitle.append(expTp);host.append(tpTitle);
+    tpBtns.append(expTp);
+    if(tp.length){
+     const certAll=node('button','طباعة جميع الشهادات','primary');certAll.type='button';
+     certAll.addEventListener('click',()=>printCertificates(tp));
+     tpBtns.append(certAll);
+    }
+    tpTitle.append(tpBtns);host.append(tpTitle);
     if(tp.length){
      const tWrap=node('div',undefined,'table-wrap'),tTbl=node('table'),tHd=node('thead'),tHr=node('tr');
-     for(const h of ['الاسم','الصف','الفصل','القسم','المعدل','المواد'])tHr.append(node('th',h));tHd.append(tHr);tTbl.append(tHd);
+     for(const h of ['الاسم','الصف','الفصل','القسم','المعدل','المواد','شهادة'])tHr.append(node('th',h));tHd.append(tHr);tTbl.append(tHd);
      const tBd=node('tbody');
-     for(const x of tp){const tr=node('tr'),av=node('td');av.append(node('span',fmtPct(x.average),'badge-good'));tr.append(node('td',x.name),node('td',x.grade),node('td',x.class_name),node('td',x.section),av,node('td',String(x.subjectsCount)));tBd.append(tr);}
+     for(const x of tp){const tr=node('tr'),av=node('td'),tdC=node('td'),cBtn=node('button','طباعة شهادة','secondary');cBtn.type='button';cBtn.addEventListener('click',()=>printCertificates([x]));tdC.append(cBtn);av.append(node('span',fmtPct(x.average),'badge-good'));tr.append(node('td',x.name),node('td',x.grade),node('td',x.class_name),node('td',x.section),av,node('td',String(x.subjectsCount)),tdC);tBd.append(tr);}
      tTbl.append(tBd);tWrap.append(tTbl);host.append(tWrap);
     }
    }
@@ -354,7 +452,7 @@
     for(const r of filtered){
      const tr=node('tr'),btn=node('button','عرض الكشف','secondary');
      btn.addEventListener('click',async()=>{
-      btn.disabled=true;detail.textContent='جارٍ تحميل كشف '+r.grade+' '+r.class_name+' — '+r.subject_name+'…';
+      btn.disabled=true;detail.replaceChildren(node('h3','جارٍ تحميل كشف '+r.grade+' '+r.class_name+' — '+r.subject_name+'…'),skeletonBlock('table'));
       try{
        const rep=await api('report',{class_id:r.class_id,subject_id:r.subject_id});
        const dWrap=node('div',undefined,'table-wrap'),dTbl=node('table'),dHd=node('thead'),dHr=node('tr');
@@ -393,5 +491,23 @@
    find('#login').hidden=true;find('#workspace').hidden=false;find('.skip').href='#workspace-main';page('overview');
   }catch(_){token=null;currentUser=null;saveToken(null);if(feedback.textContent==='جارٍ استعادة الجلسة…')feedback.textContent='الدخول للحسابات المعتمدة فقط.';}
   finally{btn.disabled=false;}
+ })();
+ (() => {
+  const gradesSec=find('#grades'),saveBar=gradesSec?.querySelector('.save-bar');
+  if(!gradesSec||!saveBar)return;
+  const statusSpan=saveBar.querySelector('span'),saveBtn=saveBar.querySelector('button.primary');
+  const dirtySet=new Set();
+  function syncSaveBar(){
+   const count=dirtySet.size;
+   saveBar.dataset.dirty=count?'true':'false';
+   if(statusSpan)statusSpan.textContent=count?'تم تعديل '+count+' درجة — لم تُحفظ بعد':'لا توجد تغييرات للحفظ';
+   if(saveBtn)saveBtn.disabled=!count;
+  }
+  gradesSec.addEventListener('input',e=>{
+   if(e.target.matches('table input, table select')){
+    dirtySet.add(e.target.dataset.rowId||e.target.name||e.target);
+    syncSaveBar();
+   }
+  });
  })();
 })();
