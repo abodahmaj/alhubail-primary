@@ -14,7 +14,16 @@
 .login-card .primary:hover:not(:disabled){background:linear-gradient(135deg,#054a3a,#075c49)}
 .preview-link{width:100%;margin-top:12px;background:transparent;color:var(--muted);font-size:13px;padding:8px;border:0}
 .preview-link:hover{color:var(--green);background:#f3f6f5}
-@media(max-width:860px){.login-shell{grid-template-columns:1fr}.intro{padding:28px 24px;gap:16px}.intro h1{font-size:28px}.intro-art{max-width:220px}.login-card{padding:28px 24px}}
+.login-configured:has(#login:not([hidden])) .environment{display:none}
+#login-feedback:empty,#overview .stats[hidden]{display:none}
+.breakdown{min-width:0}.breakdown>.period-pills{margin-bottom:10px}
+#exec-students-card{margin-top:16px;min-width:0}
+.report-section-nav,.report-pager{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-block:12px}
+.report-section-nav [aria-pressed=true]{background:var(--green);color:#fff}
+#reports [data-report-pane][hidden],#reports .report-pager[hidden],#reports .report-tabs[hidden],#reports .empty[hidden]{display:none!important}
+#exec-students-card .results-table{max-height:none;overflow-x:auto}
+.result-filter-box summary{cursor:pointer;padding-block:8px}
+@media(max-width:860px){#login{padding:16px 14px}.login-shell{grid-template-columns:minmax(0,1fr)}.intro{padding:12px 20px;gap:0}.intro .eyebrow{display:none}.intro h1{font-size:21px;margin:0}.intro h1 br,.intro-art,.login-card .icon-mark{display:none}.login-card{padding:16px 20px}.login-card h2{margin:0 0 4px}.login-card .muted{margin-bottom:12px}}
 @media(max-width:640px){#login{padding:20px 14px}.login-shell{border-radius:16px}.intro-art{display:none}}
 h1,h2,h3,th,strong{letter-spacing:0}
 .stats strong,.kpi-box strong,.bar-head strong,td{font-variant-numeric:tabular-nums}
@@ -99,11 +108,34 @@ th{font-weight:600}
 .kpi-btn:hover{background:#f7faf8}
 .kpi-hint{display:inline-block;margin-top:6px;font-size:11.5px;color:var(--green);font-weight:700}
 .kpi-card-warn .kpi-hint{color:#99251b}
+.brief-action{text-align:start;width:100%;color:inherit;font:inherit;cursor:pointer}
+.brief-action:focus-visible,.kpi-btn:focus-visible{outline:2px solid var(--green);outline-offset:-3px}
+.overview-card-dialog{box-sizing:border-box;width:min(480px,calc(100% - 32px));max-height:85vh;overflow:auto;border:1px solid var(--border,#ccd8d4);border-radius:14px;padding:20px;background:#fff;color:var(--ink);text-align:start}
+.overview-card-dialog::backdrop{background:#172e2a80}
+.chart-legend > .heat-filter{flex:0 1 auto;width:auto;min-width:0;max-width:100%;min-height:44px;padding:8px 12px;white-space:normal}
+.heat-filter[aria-pressed=true]{outline:2px solid currentColor;outline-offset:-3px;font-weight:800}
+.heat-filter:focus-visible{outline:2px solid var(--green);outline-offset:2px}
+.overview-detail-list{list-style:none;padding:0;margin:12px 0;overflow-wrap:anywhere}
+.overview-detail-list li{padding:10px 0;border-bottom:1px solid #dce6e2}
+.overview-card-dialog .report-actions{position:sticky;bottom:-20px;background:#fff;display:flex;flex-wrap:wrap;gap:8px;padding-block:10px}
+.overview-list-search,.overview-share-text{box-sizing:border-box;width:100%;min-width:0}
+@media print{.official-report .overview-detail-list li{break-inside:avoid}}
 @media(max-width:640px){.kpi-btn{display:grid;grid-template-columns:1fr auto;padding:16px 20px}.kpi-btn strong{grid-column:2;grid-row:1/4;align-self:center}}
 @media print{
   @page{size:A4;margin:14mm}
+  .official-report{direction:rtl;color:#111;background:#fff;font-size:10pt}
+  .official-header{display:flex;align-items:center;gap:8mm;border-bottom:1px solid #777;padding-bottom:4mm;break-inside:avoid}
+  .official-header img{width:29mm;height:auto;filter:brightness(0)}
+  .official-report h1{font-size:17pt;margin:5mm 0 2mm}
+  .official-scope{margin:0 0 5mm}
+  .official-approval{margin-top:8mm;break-inside:avoid}
+  .official-report table{width:100%;min-width:0;border-collapse:collapse;font-size:9pt}
+  .official-report thead{display:table-header-group}
+  .official-report tr{break-inside:avoid}
+  .official-report th,.official-report td{position:static;background:#fff;color:#111;border:1px solid #bbb;padding:2mm;white-space:normal;overflow-wrap:anywhere}
   body.printing-sheet #login,body.printing-sheet .workspace,body.printing-sheet footer,body.printing-sheet .mast{display:none!important}
   body.printing-sheet #print-sheet{display:block!important}
+  body.printing-sheet:has(.official-report)::after{display:none}
   .print-only{display:block}
   .report-actions,.exec-filters,.filters,.period-pills,.save-bar,button{display:none!important}
   .panel,.exec-card,.brief-item,.kpi-box{break-inside:avoid;box-shadow:none!important;border-color:#999!important}
