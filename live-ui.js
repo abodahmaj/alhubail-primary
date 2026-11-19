@@ -74,6 +74,12 @@
  function levelLabel(lvl){return lvl==='above'?'فوق المتوسط':lvl==='mid'?'متوسط':lvl==='low'?'منخفض':'غير مرصود';}
  function stackedList(items){
   const list=node('div',undefined,'bar-list'),colors=[['above','#075c49'],['mid','#d49b27'],['low','#b83a2d']];
+  const leg=node('div',undefined,'chart-legend');
+  for(const [k,col] of colors){
+   const it=node('span',undefined,'chart-legend-item'),sw=node('span',undefined,'chart-swatch');
+   sw.style.background=col;it.append(sw,document.createTextNode(levelLabel(k)));leg.append(it);
+  }
+  list.append(leg);
   for(const it of items){
    const row=node('div',undefined,'bar-row'),hd=node('div',undefined,'bar-head');
    hd.append(node('span',it.label),node('strong',it.right));
@@ -196,17 +202,24 @@
    const anchor=find('#live-school');if(anchor)anchor.before(wrap);else find('#overview').append(wrap);
    return;
   }
+  let jumpToStudentsLevel=null;
   if(director&&school){
    const stats=find('#overview .stats'),comp=school.completion||{},lv=an.levels||{},total=(lv.above||0)+(lv.mid||0)+(lv.low||0);
    stats.classList.add('stats-4');stats.replaceChildren();
    const ov=an.overview||{};
    const cards=[
-    ['المتوسط والوسيط (ف'+an.period+')',fmtPct(ov.average),'الوسيط: '+fmtPct(ov.median)+' · '+ov.students+' طالبة/طالب',''],
-    ['اكتمال الرصد (العليا)',fmtPct(comp.completionRate),(comp.recordedEligible||0)+' من '+(comp.expectedEligible||0)+' · '+(comp.deferredClasses||0)+' مؤجلة',''],
-    ['فوق المتوسط (≥80%)',String(lv.above||0),(total?Math.round(((lv.above||0)/total)*100):0)+'% من الدرجات · متوسط: '+(lv.mid||0),'kpi-card-good'],
-    ['منخفض (<50%)',String(lv.low||0),(an.singleSubjectDeficit||[]).length+' تعثر نوعي بمادة واحدة','kpi-card-warn']
+    ['المتوسط العام (ف'+an.period+')',fmtPct(ov.average),ov.students+' طالبة/طالب مرصودة نتائجهم','','عرض التوزيع ↙',()=>{find('#exec-dist-card')?.scrollIntoView({behavior:'smooth',block:'start'});}],
+    ['اكتمال الرصد (العليا)',fmtPct(comp.completionRate),(comp.recordedEligible||0)+' من '+(comp.expectedEligible||0)+' · '+(comp.deferredClasses||0)+' مؤجلة','','عرض الفصول والمواد ↙',()=>{find('#exec-matrix-card')?.scrollIntoView({behavior:'smooth',block:'start'});}],
+    ['فوق المتوسط (≥80%)',String(lv.above||0),(total?Math.round(((lv.above||0)/total)*100):0)+'% من الدرجات · متوسط: '+(lv.mid||0),'kpi-card-good','عرض المتفوقين ↙',()=>{if(jumpToStudentsLevel)jumpToStudentsLevel('above');}],
+    ['منخفض (<50%)',String(lv.low||0),(an.singleSubjectDeficit||[]).length+' تعثر نوعي بمادة واحدة','kpi-card-warn','الانتقال للتعثر ↙',()=>{if(jumpToStudentsLevel)jumpToStudentsLevel('low',true);else find('#exec-priority-alert')?.scrollIntoView({behavior:'smooth',block:'start'});}]
    ];
-   for(const [t,v,n,cls] of cards){const a=node('article',undefined,cls||undefined);a.append(node('span',t),node('strong',v),node('small',n));stats.append(a);}
+   for(const [t,v,n,cls,hint,onClick] of cards){
+    const a=node('article',undefined,'kpi-interactive'+(cls?' '+cls:''));
+    const btn=node('button',undefined,'kpi-btn');btn.type='button';
+    btn.append(node('span',t),node('strong',v),node('small',n),node('span',hint,'kpi-hint'));
+    btn.addEventListener('click',onClick);
+    a.append(btn);stats.append(a);
+   }
   }
   if(an.briefing?.length){
    const bGrid=node('div',undefined,'brief-grid'),titles=['أعلى مادة أداءً','تركّز حالات الدعم','التعثر النوعي'],icons=['★','⚑','◈'];
@@ -224,7 +237,7 @@
    for(const x of wlList){const k=x.name+'|'+x.grade+'|'+x.class_name;if(!byStu[k])byStu[k]={name:x.name,grade:x.grade,cls:x.class_name,subjs:[]};byStu[k].subjs.push(x.subject_name);}
    const multi=Object.values(byStu).filter(s=>s.subjs.length>=2).sort((a,b)=>b.subjs.length-a.subjs.length);
    if(multi.length){
-    const pa=node('div',undefined,'priority-alert');
+    const pa=node('div',undefined,'priority-alert');pa.id='exec-priority-alert';
     pa.append(node('h3','⚑ أولوية التدخل المبكر: تعثر في أكثر من مادة ('+multi.length+')'),node('p','طلاب وطالبات يحتاجون خطة دعم مركزة لتجاوز الصعوبات في أكثر من مادة:','muted'));
     const chips=node('div',undefined,'priority-chips');
     for(const m of multi.slice(0,12))chips.append(node('span',m.name+' ('+m.grade+' '+m.cls+') — '+m.subjs.join('، '),'priority-chip'));
@@ -232,18 +245,18 @@
    }
   }
   const grid=node('div',undefined,'exec-grid');
-  const distCard=node('section',undefined,'panel exec-card');
+  const distCard=node('section',undefined,'panel exec-card');distCard.id='exec-dist-card';
   distCard.append(node('h2','توزيع المستويات الثلاثة'),svgDonut(an.levels||{}),node('p','التصنيف المعتمد: فوق المتوسط (≥80%) · متوسط (50–79%) · منخفض (<50%).','muted'));
   const subjCard=node('section',undefined,'panel exec-card');
-  subjCard.append(node('h2','المستويات على مستوى المادة'),stackedList((an.bySubject||[]).map(s=>({label:s.subject_name+' ('+s.recorded+')',right:'متوسط '+fmtPct(s.average)+' · وسيط '+fmtPct(s.median),levels:s.levels}))));
+  subjCard.append(node('h2','المستويات على مستوى المادة'),stackedList((an.bySubject||[]).map(s=>({label:s.subject_name+' ('+s.recorded+')',right:'المتوسط '+fmtPct(s.average),levels:s.levels}))));
   const gradeCard=node('section',undefined,'panel exec-card');
-  gradeCard.append(node('h2','المستويات على مستوى الصفوف'),stackedList((an.byGrade||[]).map(g=>({label:g.grade+' ('+g.students+')',right:'متوسط '+fmtPct(g.average)+' · وسيط '+fmtPct(g.median),levels:g.levels}))));
+  gradeCard.append(node('h2','المستويات على مستوى الصفوف'),stackedList((an.byGrade||[]).map(g=>({label:g.grade+' ('+g.students+')',right:'المتوسط '+fmtPct(g.average),levels:g.levels}))));
   const secCard=node('section',undefined,'panel exec-card');
-  secCard.append(node('h2','المستويات على مستوى الأقسام'),stackedList((an.bySection||[]).map(sec=>({label:sec.section+' ('+sec.students+')',right:'متوسط '+fmtPct(sec.average)+' · وسيط '+fmtPct(sec.median),levels:sec.levels}))));
+  secCard.append(node('h2','المستويات على مستوى الأقسام'),stackedList((an.bySection||[]).map(sec=>({label:sec.section+' ('+sec.students+')',right:'المتوسط '+fmtPct(sec.average),levels:sec.levels}))));
   grid.append(distCard,subjCard,gradeCard,secCard);
   const stRows=an.studentSummaries||[];
   if(stRows.length){
-   const stCard=node('section',undefined,'panel exec-card exec-full');
+   const stCard=node('section',undefined,'panel exec-card exec-full');stCard.id='exec-students-card';
    const stHd=node('div',undefined,'table-top');stHd.style.padding='0 0 12px';
    stHd.append(node('h2','تقديرات ومستويات طلاب الصف ('+stRows.length+')'));
    const expSt=node('button','تصدير CSV','secondary');
@@ -271,11 +284,16 @@
    }
    expSt.addEventListener('click',()=>downloadCsv('alhubail-students-levels.csv',['الاسم','الصف','الفصل','القسم','لغتي','رياضيات','علوم','إنجليزي','المعدل','التقدير'],curList.map(r=>[r.name,r.grade,r.class_name,r.section,r.scores.ARB??'',r.scores.MAT??'',r.scores.SCI??'',r.scores.ENG??'',fmtPct(r.average),levelLabel(r.level)])));
    sg.addEventListener('change',drawStudents);sc.addEventListener('change',drawStudents);sl.addEventListener('change',drawStudents);sq.addEventListener('input',drawStudents);
+   jumpToStudentsLevel=(lvl,preferAlert)=>{
+    sg.value='';sc.value='';sq.value='';sl.value=lvl||'';drawStudents();
+    const target=(preferAlert&&find('#exec-priority-alert'))||stCard;
+    target.scrollIntoView({behavior:'smooth',block:'start'});
+   };
    drawStudents();grid.append(stCard);
   }
   const csRows=an.byClassSubject||[];
   if(csRows.length){
-   const fltCard=node('section',undefined,'panel exec-card exec-full');
+   const fltCard=node('section',undefined,'panel exec-card exec-full');fltCard.id='exec-matrix-card';
    fltCard.append(node('h2','تحليل الفصول والمواد (تصفية تفاعلية)'));
    const fBar=node('div',undefined,'exec-filters'),gSel=node('select'),sSel=node('select'),mSel=node('select');
    populate(gSel,[...new Set(csRows.map(r=>r.grade))].map(g=>({value:g,label:g})),'جميع الصفوف');
@@ -306,7 +324,11 @@
     const sub=csRows.filter(r=>(!gSel.value||r.grade===gSel.value)&&(!sSel.value||r.section===sSel.value)&&(!mSel.value||r.subject_id===mSel.value));
     body.replaceChildren();drillBox.replaceChildren();
     if(!sub.length){body.append(node('p','لا توجد نتائج مطابقة للتصفية.','muted'));return;}
-    body.append(node('p','اضغطي على أي خلية في خريطة الحرارة لعرض فصول الصف أو كشف المادة مباشرة.','muted'),buildMatrix(sub,(_g,_id,match)=>openMatrixDrill(match)),node('h3','ترتيب الفصول المطابقة'),barList(classRankingList(sub)));
+    const hLeg=node('div',undefined,'chart-legend');
+    for(const [lbl,cls] of [['✓ ≥ 85% ممتاز','heat-hi'],['• 70% – 84% جيد','heat-mid'],['⚑ 50% – 69% متابعة','heat-low'],['! < 50% دعم عاجل','heat-danger']]){
+     hLeg.append(node('span',lbl,'heat-cell '+cls));
+    }
+    body.append(node('p','اضغطي على أي خلية في خريطة الحرارة لعرض فصول الصف أو كشف المادة مباشرة.','muted'),hLeg,buildMatrix(sub,(_g,_id,match)=>openMatrixDrill(match)),node('h3','ترتيب الفصول المطابقة'),barList(classRankingList(sub)));
    }
    gSel.addEventListener('change',drawFiltered);sSel.addEventListener('change',drawFiltered);mSel.addEventListener('change',drawFiltered);
    drawFiltered();grid.append(fltCard);
